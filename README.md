@@ -2,7 +2,7 @@
 
 **ASeptar** es una aplicación web interactiva que funciona como asistente de póker Texas Hold'em, guiando al jugador **jugada por jugada** para tomar decisiones más acertadas con el respaldo de estadísticas, matemáticas y simulaciones avanzadas.
 
-🌐 **Aplicación desplegada públicamente:** [Enlace](https://tu-enlace-a-la-app.com)
+🌐 **Aplicación desplegada públicamente:** [Enlace](https://aseptar-app.vercel.app/)
 
 ---
 
@@ -75,4 +75,3 @@ Su objetivo es combinar **análisis matemático**, **probabilidad** y **diseño 
 ## 📄 Licencia
 
 Este proyecto está licenciado bajo la [MIT License](LICENSE).
-
