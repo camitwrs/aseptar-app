@@ -418,7 +418,7 @@ const calcularOutsYProbabilidades = (
   const mejorManoActual = obtenerMejorMano(cartasActualesParaMano);
 
   let outs = 0;
-  let cartasQueDanOuts: Carta[] = [];
+  const cartasQueDanOuts: Carta[] = [];
 
   for (const cartaPotencial of mazoRestante) {
     const cartasParaManoFutura = [...cartasActualesParaMano, cartaPotencial];
@@ -479,7 +479,6 @@ const calcularEquity = (
 
   let victorias = 0;
   let empates = 0;
-  let derrotas = 0;
   let totalSimulacionesValidas = 0; // Contador para simulaciones que se ejecutan completamente
 
   const cartasVistas = [...cartasJugador, ...cartasComunitarias];
@@ -530,8 +529,6 @@ const calcularEquity = (
       victorias++;
     } else if (resultadoComparacion === 0) {
       empates++;
-    } else {
-      derrotas++;
     }
   }
 
@@ -543,8 +540,6 @@ const calcularEquity = (
   return equityCalculada.toFixed(2);
 };
 
-// Helper para obtener el valor de un rango (para la función de evaluación pre-flop)
-const getRankValue = (rango: Rango): number => valorRango[rango];
 
 // Función para evaluar la fuerza de la mano inicial (pre-flop)
 const evaluarManoInicialPreFlop = (cartas: Carta[]): 'muyFuerte' | 'fuerte' | 'media' | 'debil' | 'muyDebil' => {
@@ -796,7 +791,6 @@ const App: React.FC = () => {
 
   // Recalcular mazo disponible (now just a filtered list, not a state) and perform all calculations
   useEffect(() => {
-    const cartasSeleccionadas = [...cartasManoJugador, ...cartasComunitarias];
 
     // Determinar si tenemos suficientes cartas para cualquier sugerencia
     const hasHoleCards = cartasManoJugador.length === 2;
@@ -914,7 +908,7 @@ const App: React.FC = () => {
       setCalculandoEquity(false);
       setPreFlopGuidance(null); // Limpiar la guía pre-flop
     }
-  }, [cartasManoJugador, cartasComunitarias, mazoCompleto, boteActual, apuestaAEnfrentar]); // Dependencias actualizadas
+  }, [cartasManoJugador, cartasComunitarias, mazoCompleto, boteActual, apuestaAEnfrentar, resultadoMano]); // Dependencias actualizadas
 
   // Manejar la eliminación de una carta de la mano del jugador
   const eliminarCartaMano = useCallback((cartaAEliminar: Carta) => {
@@ -942,7 +936,7 @@ const App: React.FC = () => {
     setCurrentRankInput('');
     setCurrentSuitInput(null);
     setInputError(null);
-  }, [mazoCompleto]);
+  }, []);
 
   // Handler para añadir una carta
   const handleAddCard = useCallback(() => {
@@ -1503,7 +1497,7 @@ const App: React.FC = () => {
                 ASeptar
               </h3>
             </div>
-            <div className="flex justify-center space-x-8 mt-8 text-slate-300">
+            <div className="flex justify-center space-x-8 mt-8 text-slate-00">
               <div className="flex items-center space-x-2">
                 <Calculator className="w-4 h-4" />
                 <span className="text-sm">Cálculos Precisos</span>

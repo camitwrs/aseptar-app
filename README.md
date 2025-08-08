@@ -76,6 +76,3 @@ Su objetivo es combinar **análisis matemático**, **probabilidad** y **diseño 
 
 Este proyecto está licenciado bajo la [MIT License](LICENSE).
 
----
-
-💡 _Desarrollado como proyecto de portafolio para demostrar habilidades en desarrollo web, lógica algorítmica y análisis de datos aplicados al póker._
