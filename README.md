@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ASeptar ♠
 
-## Getting Started
+**ASeptar** es una aplicación web interactiva que funciona como asistente de póker Texas Hold'em, guiando al jugador **jugada por jugada** para tomar decisiones más acertadas con el respaldo de estadísticas, matemáticas y simulaciones avanzadas.
 
-First, run the development server:
+🌐 **Aplicación desplegada públicamente:** [Enlace](https://tu-enlace-a-la-app.com)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Descripción
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+ASeptar analiza tu mano, las cartas comunitarias, el bote y las apuestas para entregarte:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Evaluación de tu mejor jugada** (Call, Check, Raise o Fold).
+- **Cálculo de probabilidades y outs** en cada etapa de la mano.
+- **Estimación de la equity** mediante **simulación Monte Carlo**, corriendo miles de escenarios posibles para calcular la probabilidad real de victoria.
+- **Cálculo de Pot Odds** y comparativa con tu equity para tomar decisiones óptimas.
+- **Guía pre-flop** con análisis de fuerza de mano inicial y consejos.
 
-## Learn More
+Su objetivo es combinar **análisis matemático**, **probabilidad** y **diseño intuitivo** para ayudar a los jugadores a mejorar su estrategia.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🛠️ Tecnologías utilizadas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Frontend:** [Next.js](https://nextjs.org/) + [React](https://react.dev/)
+- **Estilos:** [Tailwind CSS](https://tailwindcss.com/)
+- **Iconos:** [Lucide Icons](https://lucide.dev/)
+- **Gráficos:** [Recharts](https://recharts.org/)
+- **Lenguaje:** TypeScript
+- **Algoritmos:**
+  - Evaluador de manos de póker hecho a medida.
+  - **Simulación Monte Carlo** para cálculo de equity.
+  - Lógica de Pot Odds y outs.
+  - Clasificación de manos iniciales (pre-flop).
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## ⚙️ Lógica de la aplicación
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Entrada de datos**  
+   El usuario introduce sus cartas y las comunitarias, junto con valores del bote y apuestas.
+
+2. **Evaluación de mano**  
+   Algoritmo interno analiza todas las combinaciones posibles de cartas para determinar la mejor mano actual.
+
+3. **Cálculo de probabilidades**
+
+   - **Outs:** Cartas restantes que mejoran tu mano.
+   - **Pot Odds:** Relación entre la apuesta a enfrentar y el tamaño del bote.
+   - **Equity (Monte Carlo):** Miles de simulaciones aleatorias que estiman tu probabilidad de ganar, empatar o perder.
+
+4. **Sugerencia de jugada**  
+   Basada en:
+   - Fuerza de la mano (pre-flop y post-flop).
+   - Comparación equity vs pot odds.
+   - Situación de la mesa.
+
+---
+
+## 🎯 Público objetivo
+
+- Jugadores que buscan **mejorar su estrategia** con apoyo estadístico.
+- Aprendices que quieren **entender mejor las probabilidades y la lógica del póker**.
+- Creadores de contenido y entrenadores de póker que necesitan una herramienta visual y explicativa.
+
+---
+
+## 📸 Capturas
+
+![Interfaz principal](images/inicio.png)
+![Análisis de probabilidades](images/probabilidades.png)
+
+---
+
+## 📄 Licencia
+
+Este proyecto está licenciado bajo la [MIT License](LICENSE).
+
+---
+
+💡 _Desarrollado como proyecto de portafolio para demostrar habilidades en desarrollo web, lógica algorítmica y análisis de datos aplicados al póker._
