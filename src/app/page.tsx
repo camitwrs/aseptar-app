@@ -830,7 +830,7 @@ const getStraightDrawOuts = (allCards: Carta[], mazoRestante: Carta[]): { outs: 
         }
 
         let matchedCount = 0;
-        let missingRanksInSequence: number[] = [];
+        const missingRanksInSequence: number[] = [];
 
         for (const rank of requiredRanks) {
             if (ranksPresent.has(rank)) {
