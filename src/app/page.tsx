@@ -1,5 +1,4 @@
 "use client"
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { SpadeIcon as Spades, Heart, Diamond, Club, TrendingUp, Calculator, Target, Award, Zap, RotateCcw, Plus, BarChart3 } from 'lucide-react';
@@ -771,6 +770,200 @@ const parseCardInput = (rankInput: string, suitInput: Palo | null, mazoCompleto:
   return { card: foundCard, error: null };
 };
 
+// Helper to calculate probability from outs and remaining cards
+const calculateProbabilityForDraw = (outs: number, remainingCards: number, numCardsToCome: number): { probNext: string; probTotal: string } => {
+  if (remainingCards === 0 || outs === 0) {
+    return { probNext: '0.00', probTotal: '0.00' };
+  }
+
+  const probNext = (outs / remainingCards) * 100;
+  let probTotal = 0;
+
+  if (numCardsToCome === 1) { // Turn to River (1 card to come)
+    probTotal = probNext; 
+  } else if (numCardsToCome === 2) { // Flop to River (2 cards to come)
+    // More accurate calculation for hitting at least one out in 2 cards
+    if (remainingCards < 2 || remainingCards - outs < 1) { // Edge cases for very few cards left
+        probTotal = Math.min(100, outs * 4); // Fallback to rule of 4 for very small numbers, cap at 100%
+    } else {
+        const probMissFirst = (remainingCards - outs) / remainingCards;
+        const probMissSecond = (remainingCards - outs - 1) / (remainingCards - 1);
+        probTotal = (1 - (probMissFirst * probMissSecond)) * 100;
+    }
+  } else {
+    probTotal = probNext; // Default to next card if not 1 or 2 cards to come (e.g., pre-flop)
+  }
+
+  return {
+    probNext: probNext.toFixed(2),
+    probTotal: probTotal.toFixed(2),
+  };
+};
+
+// Helper to check for straight draws (OESD/Gutshot)
+const getStraightDrawOuts = (allCards: Carta[], mazoRestante: Carta[]): { outs: number; type: 'OESD' | 'Gutshot' | 'Both' | 'None' } => {
+    const ranksPresent = new Set<number>();
+    for (const card of allCards) {
+        ranksPresent.add(obtenerValorNumericoCarta(card));
+    }
+    // Add Ace as 1 for A-5 straight
+    if (ranksPresent.has(valorRango['A'])) {
+        ranksPresent.add(1);
+    }
+
+    // Check if a straight is already made with the current cards
+    const currentBestHand = obtenerMejorMano(allCards);
+    if (currentBestHand.tipo === TipoMano.ESCALERA || currentBestHand.tipo === TipoMano.ESCALERA_DE_COLOR || currentBestHand.tipo === TipoMano.ESCALERA_REAL_DE_COLOR) {
+        return { outs: 0, type: 'None' };
+    }
+
+    const potentialStraightOuts = new Set<number>();
+    let hasOESD = false;
+    let hasGutshot = false;
+
+    // Iterate through all possible 5-card straight sequences
+    // A-5 (1-5) up to 10-A (10-14)
+    for (let startRank = 1; startRank <= 10; startRank++) {
+        const requiredRanks = [];
+        for (let i = 0; i < 5; i++) {
+            requiredRanks.push(startRank + i);
+        }
+
+        let matchedCount = 0;
+        let missingRanksInSequence: number[] = [];
+
+        for (const rank of requiredRanks) {
+            if (ranksPresent.has(rank)) {
+                matchedCount++;
+            } else {
+                missingRanksInSequence.push(rank);
+            }
+        }
+
+        if (matchedCount === 4 && missingRanksInSequence.length === 1) {
+            const missingRank = missingRanksInSequence[0];
+            const isInternalGap = requiredRanks.indexOf(missingRank) > 0 && requiredRanks.indexOf(missingRank) < 4;
+
+            if (isInternalGap) { // This is a gutshot
+                potentialStraightOuts.add(missingRank);
+                hasGutshot = true;
+            } else { // This is an open-ended straight draw (OESD)
+                potentialStraightOuts.add(missingRank);
+                hasOESD = true;
+            }
+        }
+    }
+
+    let totalOuts = 0;
+    for (const rank of potentialStraightOuts) {
+        totalOuts += mazoRestante.filter(c => obtenerValorNumericoCarta(c) === rank).length;
+    }
+
+    let type: 'OESD' | 'Gutshot' | 'Both' | 'None' = 'None';
+    if (hasOESD && hasGutshot) type = 'Both';
+    else if (hasOESD) type = 'OESD';
+    else if (hasGutshot) type = 'Gutshot';
+
+    return { outs: totalOuts, type };
+};
+
+
+const getDynamicDrawProbabilities = (
+  playerHand: Carta[],
+  communityCards: Carta[],
+  mazoCompleto: Carta[]
+) => {
+  const allCards = [...playerHand, ...communityCards];
+  const cardsSeen = new Set(allCards.map(c => `${c.rango}${c.palo}`));
+  const mazoRestante = mazoCompleto.filter(cartaMazo =>
+    !cardsSeen.has(`${cartaMazo.rango}${cartaMazo.palo}`)
+  );
+  const remainingCardsInDeck = mazoRestante.length;
+
+  const numCardsToCome = 5 - communityCards.length; // 2 for flop, 1 for turn, 0 for river
+
+  const dynamicDraws: {
+    flushDraw?: { outs: number; probNext: string; probTotal: string };
+    straightDraw?: { outs: number; probNext: string; probTotal: string; type: 'OESD' | 'Gutshot' | 'Both' | 'None' };
+    setDraw?: { outs: number; probNext: string; probTotal: string };
+    quadsDraw?: { outs: number; probNext: string; probTotal: string };
+  } = {};
+
+  // --- Flush Draw ---
+  const suitCounts = new Map<Palo, number>();
+  for (const card of allCards) {
+    suitCounts.set(card.palo, (suitCounts.get(card.palo) || 0) + 1);
+  }
+
+  let flushSuit: Palo | undefined;
+  for (const [palo, count] of suitCounts.entries()) {
+    if (count === 4) { // Needs 4 cards of a suit for a flush draw
+      flushSuit = palo;
+      break;
+    }
+  }
+
+  if (flushSuit) {
+    const outs = mazoRestante.filter(c => c.palo === flushSuit).length;
+    if (outs > 0) {
+      const { probNext, probTotal } = calculateProbabilityForDraw(outs, remainingCardsInDeck, numCardsToCome);
+      dynamicDraws.flushDraw = { outs, probNext, probTotal };
+    }
+  }
+
+  // --- Straight Draws (OESD and Gutshot) ---
+  const { outs: straightOuts, type: straightType } = getStraightDrawOuts(allCards, mazoRestante);
+  if (straightOuts > 0) {
+    const { probNext, probTotal } = calculateProbabilityForDraw(straightOuts, remainingCardsInDeck, numCardsToCome);
+    dynamicDraws.straightDraw = { outs: straightOuts, probNext, probTotal, type: straightType };
+  }
+
+  // --- Set Draw / Quads Draw ---
+  const rankCounts = new Map<Rango, number>();
+  for (const card of allCards) {
+    rankCounts.set(card.rango, (rankCounts.get(card.rango) || 0) + 1);
+  }
+
+  // Check for Set Draw (pocket pair + 1 on board = 3 of a kind)
+  if (playerHand.length === 2 && playerHand[0].rango === playerHand[1].rango) {
+      const pairRank = playerHand[0].rango;
+      const countOnBoard = communityCards.filter(c => c.rango === pairRank).length;
+      if (countOnBoard === 0) { // Player has a pocket pair, no card of that rank on board yet
+          const outs = mazoRestante.filter(c => c.rango === pairRank).length; // Should be 2
+          if (outs > 0) {
+              const { probNext, probTotal } = calculateProbabilityForDraw(outs, remainingCardsInDeck, numCardsToCome);
+              dynamicDraws.setDraw = { outs, probNext, probTotal };
+          }
+      } else if (countOnBoard === 1) { // Player has a pocket pair + one on board (already a set)
+          // This is a quads draw (from set to quads)
+          const outs = mazoRestante.filter(c => c.rango === pairRank).length; // Should be 1
+          if (outs > 0) {
+              const { probNext, probTotal } = calculateProbabilityForDraw(outs, remainingCardsInDeck, numCardsToCome);
+              dynamicDraws.quadsDraw = { outs, probNext, probTotal };
+          }
+      }
+  } else { // Player doesn't have a pocket pair, check for set draw from a single card in hand
+      for (const handCard of playerHand) {
+          const countOnBoard = communityCards.filter(c => c.rango === handCard.rango).length;
+          if (countOnBoard === 1) { // Player has one card, one on board (pair) -> set draw
+              const outs = mazoRestante.filter(c => c.rango === handCard.rango).length; // Should be 2
+              if (outs > 0) {
+                  const { probNext, probTotal } = calculateProbabilityForDraw(outs, remainingCardsInDeck, numCardsToCome);
+                  dynamicDraws.setDraw = { outs, probNext, probTotal };
+              }
+          } else if (countOnBoard === 2) { // Player has one card, two on board (set) -> quads draw
+              const outs = mazoRestante.filter(c => c.rango === handCard.rango).length; // Should be 1
+              if (outs > 0) {
+                  const { probNext, probTotal } = calculateProbabilityForDraw(outs, remainingCardsInDeck, numCardsToCome);
+                  dynamicDraws.quadsDraw = { outs, probNext, probTotal };
+              }
+          }
+      }
+  }
+  return dynamicDraws;
+};
+
+
 // Componente principal de la aplicación
 const App: React.FC = () => {
   const [mazoCompleto, setMazoCompleto] = useState<Carta[]>([]);
@@ -783,6 +976,8 @@ const App: React.FC = () => {
     probabilidadTurnRiver: string;
     cartasQueDanOuts: Carta[];
   } | null>(null);
+  const [dynamicDrawsResult, setDynamicDrawsResult] = useState<ReturnType<typeof getDynamicDrawProbabilities> | null>(null);
+
 
   // Nuevos estados para Pot Odds y Equity
   const [boteActual, setBoteActual] = useState<number>(0);
@@ -828,7 +1023,7 @@ const App: React.FC = () => {
         const potOdds = calcularPotOdds(boteActual, apuestaAEnfrentar);
         setPotOddsCalculadas(potOdds);
 
-        // Solo calcular Equity si estamos en Flop o Turn (antes del River)
+        // Solo calcular Equity y Dynamic Draws si estamos en Flop o Turn (antes del River)
         if (numCommunityCards < 5) {
             setCalculandoEquity(true);
             const timer = setTimeout(() => {
@@ -839,16 +1034,23 @@ const App: React.FC = () => {
                 setSugerenciaJugada(sugerirJugada(parseFloat(equity), parseFloat(potOdds), apuestaAEnfrentar, currentBestHand, cartasComunitarias, cartasManoJugador));
             }, 50);
             setPreFlopGuidance(null);
+
+            // Calculate dynamic draws
+            const dynamicDraws = getDynamicDrawProbabilities(cartasManoJugador, cartasComunitarias, mazoCompleto);
+            setDynamicDrawsResult(dynamicDraws);
+
             return () => clearTimeout(timer);
         } else { // River (5 cartas comunitarias)
             setCalculandoEquity(false); // No se calcula Equity en el River para mejorar
             setEquityCalculada('N/A'); // No hay más equity de mejora
             setSugerenciaJugada(sugerirJugada(0, parseFloat(potOdds), apuestaAEnfrentar, currentBestHand, cartasComunitarias, cartasManoJugador)); // Equity no es factor de mejora
             setPreFlopGuidance(null);
+            setDynamicDrawsResult(null); // No hay proyectos en el river
         }
 
       } else { // Etapa Pre-flop (0 cartas comunitarias) o con 1 o 2 cartas comunitarias
         setOutsResult(null);
+        setDynamicDrawsResult(null); // No hay proyectos relevantes antes del flop
         // Siempre calcula las Pot Odds si hay una apuesta, independientemente de las cartas comunitarias
         setPotOddsCalculadas(calcularPotOdds(boteActual, apuestaAEnfrentar)); 
         setEquityCalculada('N/A');
@@ -920,6 +1122,7 @@ const App: React.FC = () => {
       setSugerenciaJugada('N/A');
       setCalculandoEquity(false);
       setPreFlopGuidance(null); // Limpiar la guía pre-flop
+      setDynamicDrawsResult(null); // Limpiar proyectos dinámicos
     }
   }, [cartasManoJugador, cartasComunitarias, boteActual, apuestaAEnfrentar]); // Dependencias actualizadas
 
@@ -946,6 +1149,7 @@ const App: React.FC = () => {
     setSugerenciaJugada('N/A');
     setCalculandoEquity(false);
     setPreFlopGuidance(null); // Limpiar la guía pre-flop al reiniciar
+    setDynamicDrawsResult(null); // Limpiar proyectos dinámicos
     setCurrentRankInput('');
     setCurrentSuitInput(null);
     setInputError(null);
@@ -1006,14 +1210,23 @@ const App: React.FC = () => {
   // Agrupar cartas que dan outs por rango para una visualización compacta
   const outsPorRango: { [key: string]: number } = {};
   if (outsResult && outsResult.cartasQueDanOuts && outsResult.cartasQueDanOuts.length > 0) {
-    outsResult.cartasQueDanOuts.forEach(carta => { // FIXED: Changed .cartasQueOuts to .cartasQueDanOuts
+    outsResult.cartasQueDanOuts.forEach(carta => {
       outsPorRango[carta.rango] = (outsPorRango[carta.rango] || 0) + 1;
     });
   }
 
   const outsSummary = Object.entries(outsPorRango)
     .sort(([rangoA], [rangoB]) => valorRango[rangoB as Rango] - valorRango[rangoA as Rango])
-    .map(([rango, count]) => `${rango} (${count})`)
+    .map(([rango, count]) => {
+      let displayRango = rango;
+      // Convert single letters for ranks to full names for better readability
+      if (rango === 'A') displayRango = 'As';
+      if (rango === 'K') displayRango = 'Rey';
+      if (rango === 'Q') displayRango = 'Reina';
+      if (rango === 'J') displayRango = 'Jota';
+      if (rango === 'T') displayRango = 'Diez';
+      return `${displayRango} (${count} cartas)`;
+    })
     .join(', ');
 
   return (
@@ -1326,8 +1539,11 @@ const App: React.FC = () => {
                     
                     {outsSummary && (
                       <div className="bg-slate-50 p-4 rounded-lg">
-                        <h5 className="font-semibold text-slate-800 mb-2">Cartas que mejoran:</h5>
+                        <h5 className="font-semibold text-slate-800 mb-2">Cartas que te dan una mejor mano:</h5>
                         <p className="text-slate-700 text-sm">{outsSummary}</p>
+                        <p className="text-slate-500 text-xs mt-2">
+                          *Los números entre paréntesis indican cuántas cartas de ese rango quedan en el mazo y te darían un out.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1378,50 +1594,57 @@ const App: React.FC = () => {
                     )}
                   </div>
                 </div>
-
-                {/* Flop connection probabilities */}
-                {cartasComunitarias.length === 3 && (
-                  <div className="mt-8 bg-slate-50 p-6 rounded-lg border border-slate-200">
-                    <h4 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-                      <Target className="w-5 h-5 mr-2" />
-                      Probabilidades en el Flop
-                    </h4>
-                    <div className="grid md:grid-cols-2 gap-4 text-gray-700 text-sm">
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Set (Trío):</span>
-                          <span className="font-semibold">~10.77%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Doble Pareja:</span>
-                          <span className="font-semibold">~2.02%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Pareja:</span>
-                          <span className="font-semibold">~29.0%</span>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Flush Draw:</span>
-                          <span className="font-semibold">~10.94%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Straight Draw:</span>
-                          <span className="font-semibold">~9.98%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Gutshot:</span>
-                          <span className="font-semibold">~4.88%</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
         )}
+
+        {/* Dynamic Project Analysis */}
+        {dynamicDrawsResult && Object.keys(dynamicDrawsResult).length > 0 && cartasComunitarias.length >= 3 && cartasComunitarias.length < 5 && (
+            <div className="mb-12">
+                <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
+                    <div className="px-6 py-4 border-b border-slate-200">
+                        <h3 className="text-lg font-semibold text-slate-900 flex items-center">
+                            <BarChart3 className="w-5 h-5 mr-2" />
+                            Análisis de Proyectos
+                        </h3>
+                        <p className="text-slate-600 text-sm mt-1">Probabilidades de completar tus proyectos de mano.</p>
+                    </div>
+                    <div className="p-6 grid md:grid-cols-2 gap-6 text-slate-700">
+                        {dynamicDrawsResult.flushDraw && (
+                            <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                <span>Proyecto de Color (Flush Draw):</span>
+                                <span className="font-semibold">{dynamicDrawsResult.flushDraw.probTotal}%</span>
+                            </div>
+                        )}
+                        {dynamicDrawsResult.straightDraw && (
+                            <div className="flex justify-between items-center bg-green-50 p-3 rounded-lg border border-green-200">
+                                <span>Proyecto de Escalera ({dynamicDrawsResult.straightDraw.type === 'OESD' ? 'Abierta' : dynamicDrawsResult.straightDraw.type === 'Gutshot' ? 'Interna' : 'Mixta'}):</span>
+                                <span className="font-semibold">{dynamicDrawsResult.straightDraw.probTotal}%</span>
+                            </div>
+                        )}
+                        {dynamicDrawsResult.setDraw && (
+                            <div className="flex justify-between items-center bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                <span>Proyecto de Trío (Set Draw):</span>
+                                <span className="font-semibold">{dynamicDrawsResult.setDraw.probTotal}%</span>
+                            </div>
+                        )}
+                        {dynamicDrawsResult.quadsDraw && (
+                            <div className="flex justify-between items-center bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                                <span>Proyecto de Póker (Quads Draw):</span>
+                                <span className="font-semibold">{dynamicDrawsResult.quadsDraw.probTotal}%</span>
+                            </div>
+                        )}
+                        {Object.keys(dynamicDrawsResult).length === 0 && (
+                            <p className="col-span-2 text-center text-slate-500">
+                                No hay proyectos de mano significativos en este momento.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
 
           {/* Decision section */}
         {cartasManoJugador.length === 2 && (
@@ -1459,6 +1682,9 @@ const App: React.FC = () => {
                           {potOddsCalculadas === 'N/A' ? potOddsCalculadas : `${potOddsCalculadas}%`}
                         </div>
                         <p className="text-slate-600">Pot Odds</p>
+                        <p className="text-slate-500 text-xs mt-1">
+                          (El porcentaje del bote que te cuesta igualar)
+                        </p>
                         {apuestaAEnfrentar === 0 && (
                           <p className="text-slate-500 text-xs mt-1">
                             Las Pot Odds se calculan cuando hay una apuesta a enfrentar.
@@ -1467,15 +1693,28 @@ const App: React.FC = () => {
                       </div>
                       
                       <div className="text-center">
-                        <div className={`inline-flex items-center px-6 py-3 rounded-lg font-semibold text-lg ${
-                          sugerenciaJugada === 'Call' ? 'bg-green-100 text-green-800 border border-green-200' :
-                          sugerenciaJugada === 'Check' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                          sugerenciaJugada === 'Fold' ? 'bg-red-100 text-red-800 border border-red-200' :
-                          sugerenciaJugada === 'Raise' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
-                          'bg-slate-100 text-slate-800 border border-slate-200'
-                        }`}>
-                          {sugerenciaJugada}
+                        <div className="text-2xl font-bold text-slate-900 mb-2">
+                          {equityCalculada === 'N/A' ? equityCalculada : `${equityCalculada}%`}
                         </div>
+                        <p className="text-slate-600">Tu Equity</p>
+                        <p className="text-slate-500 text-xs mt-1">
+                          (Probabilidad de ganar el bote)
+                        </p>
+                        {calculandoEquity && (
+                          <p className="text-slate-500 text-xs mt-1">Calculando...</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-center mt-6">
+                      <div className={`inline-flex items-center px-6 py-3 rounded-lg font-semibold text-lg ${
+                        sugerenciaJugada === 'Call' ? 'bg-green-100 text-green-800 border border-green-200' :
+                        sugerenciaJugada === 'Check' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                        sugerenciaJugada === 'Fold' ? 'bg-red-100 text-red-800 border border-red-200' :
+                        sugerenciaJugada === 'Raise' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
+                        'bg-slate-100 text-slate-800 border border-slate-200'
+                      }`}>
+                        {sugerenciaJugada}
                       </div>
                     </div>
                     
@@ -1483,10 +1722,13 @@ const App: React.FC = () => {
                       <h5 className="font-semibold text-slate-800 mb-2">Metodología</h5>
                       <div className="text-slate-700 text-sm space-y-1">
                         <p>• <strong>Pre-flop:</strong> Basado en fuerza de mano inicial</p>
-                        <p>• <strong>Post-flop:</strong> Comparación Equidad vs Pot Odds</p>
-                        <p>• <strong>Call:</strong> Equidad ≥ Pot Odds</p>
-                        <p>• <strong>Fold:</strong> Equidad &lt; Pot Odds</p>
-                        <p>• <strong>Raise:</strong> Manos fuertes o proyectos con alta equidad</p>
+                        <p>• <strong>Post-flop:</strong> La sugerencia se basa en la comparación de tu <strong>Equity</strong> (probabilidad de ganar el bote) vs. las <strong>Pot Odds</strong> (el porcentaje del bote que te cuesta igualar la apuesta).</p>
+                        <p>• <strong>Call:</strong> Tu Equity es mayor o igual que las Pot Odds. Es una jugada matemáticamente rentable a largo plazo.</p>
+                        <p>• <strong>Fold:</strong> Tu Equity es menor que las Pot Odds. No es rentable igualar la apuesta.</p>
+                        <p>• <strong>Raise:</strong> Se sugiere para manos muy fuertes o proyectos con alta equity que tienen buenas probabilidades de mejorar y ganar un bote más grande.</p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          *Recuerda que estas son sugerencias matemáticas. El póker también implica lectura de oponentes y dinámica de mesa.
+                        </p>
                       </div>
                     </div>
                   </div>
