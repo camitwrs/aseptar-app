@@ -53,7 +53,6 @@ Su objetivo es combinar **análisis matemático**, **probabilidad** y **diseño 
    Basada en:
    - Fuerza de la mano (pre-flop y post-flop).
    - Comparación equity vs pot odds.
-   - Situación de la mesa.
 
 ---
 

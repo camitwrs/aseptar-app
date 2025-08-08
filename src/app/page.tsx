@@ -245,7 +245,7 @@ const evaluarMano5Cartas = (cartas: Carta[]): ResultadoMano => {
   if (rangosAgrupadosPorCantidad.has(3)) {
     const rangoTrio = rangosAgrupadosPorCantidad.get(3)![0];
     const cartasTrio = cartasOrdenadas.filter(c => c.rango === rangoTrio);
-    const kickers = cartasOrdenadas.filter(c => c.rango !== rangoTrio).slice(0,2);
+    const kickers: Carta[] = cartasOrdenadas.filter(c => c.rango !== rangoTrio).slice(0,2);
     return { tipo: TipoMano.TRIO, descripcion: `Trío de ${rangoTrio}`, cartasClave: cartasTrio, kickers: kickers };
   }
 
@@ -490,19 +490,35 @@ const calcularEquity = (
     const mazoSimulacion = [...mazoRestanteBase].sort(() => Math.random() - 0.5);
     const cartasNecesariasParaSimulacion = 2 + (5 - cartasComunitarias.length); // 2 para oponente + restantes para comunidad
 
+    // Asegurarse de que hay suficientes cartas en el mazo para la simulación
     if (mazoSimulacion.length < cartasNecesariasParaSimulacion) {
-        // No hay suficientes cartas para completar esta simulación (oponente + futuras comunitarias)
-        continue;
+        continue; // Saltar esta simulación si no hay suficientes cartas
     }
 
     // Repartir 2 cartas para el oponente
-    const manoOponente = [mazoSimulacion.pop()!, mazoSimulacion.pop()!];
+    const manoOponente: Carta[] = [];
+    // Asegura que hay al menos 2 cartas para el oponente y que no se intente pop de un array vacío
+    if (mazoSimulacion.length >= 2) { 
+      manoOponente.push(mazoSimulacion.pop()!);
+      manoOponente.push(mazoSimulacion.pop()!);
+    } else {
+        continue; // Saltar si no se pueden repartir las cartas del oponente
+    }
 
     // Repartir las cartas comunitarias restantes (Turn y River)
     const cartasComunitariasFuturas: Carta[] = [];
     const cartasNecesariasParaBoard = 5 - cartasComunitarias.length;
     for (let j = 0; j < cartasNecesariasParaBoard; j++) {
-      cartasComunitariasFuturas.push(mazoSimulacion.pop()!);
+      if (mazoSimulacion.length > 0) { // Asegura que hay cartas para el board
+        cartasComunitariasFuturas.push(mazoSimulacion.pop()!);
+      } else {
+          continue; // Saltar si no se pueden completar las cartas del board
+      }
+    }
+
+    // Si no se pudieron repartir todas las cartas necesarias, saltar esta simulación
+    if (manoOponente.length !== 2 || cartasComunitariasFuturas.length !== cartasNecesariasParaBoard) {
+        continue;
     }
 
     const cartasFinalesJugador = [...cartasJugador, ...cartasComunitarias, ...cartasComunitariasFuturas];
@@ -510,7 +526,6 @@ const calcularEquity = (
 
     // Asegurarse de que las manos finales tienen 7 cartas para una evaluación completa
     if (cartasFinalesJugador.length !== 7 || cartasFinalesOponente.length !== 7) {
-        // Esto no debería ocurrir si las comprobaciones anteriores son correctas, pero es una defensa
         continue;
     }
 
@@ -708,7 +723,7 @@ const CartaDisplay: React.FC<PropsCartaDisplay> = ({ carta, onClick, estaSelecci
       style={{
         background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
         boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.05)',
-        fontFamily: 'Inter, "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
+        // Se eliminó la propiedad fontFamily para heredar del RootLayout
       }}
       onClick={() => onClick && onClick(carta)}
     >
@@ -791,18 +806,15 @@ const App: React.FC = () => {
 
   // Recalcular mazo disponible (now just a filtered list, not a state) and perform all calculations
   useEffect(() => {
-
     // Determinar si tenemos suficientes cartas para cualquier sugerencia
     const hasHoleCards = cartasManoJugador.length === 2;
     const numCommunityCards = cartasComunitarias.length;
 
-    // Siempre calcula la mejor mano si hay al menos 5 cartas en total
-    if (cartasManoJugador.length + cartasComunitarias.length >= 5) {
-      const resultadoMejorMano = obtenerMejorMano([...cartasManoJugador, ...cartasComunitarias]);
-      setResultadoMano(resultadoMejorMano);
-    } else {
-      setResultadoMano(null); // No hay suficientes cartas para una mano completa
-    }
+    // Calcular la mejor mano localmente
+    const currentBestHand = (cartasManoJugador.length + numCommunityCards >= 5)
+      ? obtenerMejorMano([...cartasManoJugador, ...cartasComunitarias])
+      : null;
+    setResultadoMano(currentBestHand); // Actualiza el estado una vez
 
     if (hasHoleCards) {
       if (numCommunityCards >= 3) { // Flop, Turn, River
@@ -823,14 +835,15 @@ const App: React.FC = () => {
                 const equity = calcularEquity(cartasManoJugador, cartasComunitarias, mazoCompleto);
                 setEquityCalculada(equity);
                 setCalculandoEquity(false);
-                setSugerenciaJugada(sugerirJugada(parseFloat(equity), parseFloat(potOdds), apuestaAEnfrentar, resultadoMano, cartasComunitarias, cartasManoJugador));
+                // Usa la variable local currentBestHand aquí
+                setSugerenciaJugada(sugerirJugada(parseFloat(equity), parseFloat(potOdds), apuestaAEnfrentar, currentBestHand, cartasComunitarias, cartasManoJugador));
             }, 50);
             setPreFlopGuidance(null);
             return () => clearTimeout(timer);
         } else { // River (5 cartas comunitarias)
             setCalculandoEquity(false); // No se calcula Equity en el River para mejorar
             setEquityCalculada('N/A'); // No hay más equity de mejora
-            setSugerenciaJugada(sugerirJugada(0, parseFloat(potOdds), apuestaAEnfrentar, resultadoMano, cartasComunitarias, cartasManoJugador)); // Equity no es factor de mejora
+            setSugerenciaJugada(sugerirJugada(0, parseFloat(potOdds), apuestaAEnfrentar, currentBestHand, cartasComunitarias, cartasManoJugador)); // Equity no es factor de mejora
             setPreFlopGuidance(null);
         }
 
@@ -861,7 +874,7 @@ const App: React.FC = () => {
                 <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-6 rounded-xl border border-purple-200">
                     <p className="text-purple-700 text-sm mt-2 leading-relaxed">
                         En el poker, existen <strong className="text-purple-800">1326</strong> combinaciones posibles de dos cartas iniciales.
-                        Las manos como la tuya, <strong className="text-purple-800">{handTypeDescription}</strong>, son solo una pequeña parte de ellas.
+                        Las manos como la tuya, <strong className="text-purple-800">{handTypeDescription}</strong>, son solo una peque&ntilde;a parte de ellas.
                     </p>
                     <div className="grid md:grid-cols-2 gap-4 mt-4">
                         <ul className="text-purple-700 text-sm list-disc list-inside space-y-1">
@@ -873,24 +886,24 @@ const App: React.FC = () => {
                     </div>
                     <h4 className="text-purple-800 text-base font-bold mt-6 mb-3 flex items-center">
                         <Target className="w-5 h-5 mr-2" />
-                        Las Peores Manos de Póker (Pre-flop):
+                        Las Peores Manos de P&oacute;ker (Pre-flop):
                     </h4>
                     <p className="text-purple-700 text-sm mb-3 leading-relaxed">
-                        Es crucial entender las manos más débiles para saber cuándo retirarse. Aquí están algunas de las peores manos que puedes recibir:
+                        Es crucial entender las manos m&aacute;s d&eacute;biles para saber cu&aacute;ndo retirarse. Aqu&iacute; est&aacute;n algunas de las peores manos que puedes recibir:
                     </p>
                     <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                         <ul className="text-red-700 text-sm list-disc list-inside space-y-1">
-                            <li><strong>2-7 Offsuit</strong>: Considerada la peor mano. Las cartas más bajas y sin potencial de escalera o color.</li>
+                            <li><strong>2-7 Offsuit</strong>: Considerada la peor mano. Las cartas m&aacute;s bajas y sin potencial de escalera o color.</li>
                             <li><strong>2-8 Offsuit</strong>: Marginalmente mejor que 2-7, pero igual de injugable.</li>
-                            <li><strong>3-8 y 3-7 Offsuit</strong>: También muy débiles, sin potencial de escalera o color significativo.</li>
-                            <li><strong>2-10 Offsuit</strong>: Famosa como la "mano de Doyle Brunson", pero estadísticamente una de las peores.</li>
-                            <li><strong>9 y 5 Offsuit</strong>: Conocida como "Dolly Parton". No es una mano con ventaja estadística a largo plazo.</li>
-                            <li><strong>Cartas bajas y de cara Offsuit</strong> (ej. J-2o, Q-3o, K-4o, A-2o a A-5o): Un error común de principiantes es jugar cualquier carta con una figura.</li>
+                            <li><strong>3-8 y 3-7 Offsuit</strong>: Tambi&eacute;n muy d&eacute;biles, sin potencial de escalera o color significativo.</li>
+                            <li><strong>2-10 Offsuit</strong>: Famosa como la &quot;mano de Doyle Brunson&quot;, pero estad&iacute;sticamente una de las peores.</li>
+                            <li><strong>9 y 5 Offsuit</strong>: Conocida como &quot;Dolly Parton&quot;. No es una mano con ventaja estad&iacute;stica a largo plazo.</li>
+                            <li><strong>Cartas bajas y de cara Offsuit</strong> (ej. J-2o, Q-3o, K-4o, A-2o a A-5o): Un error com&uacute;n de principiantes es jugar cualquier carta con una figura.</li>
                         </ul>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg border border-green-200 mt-4">
                         <p className="text-green-800 text-sm font-semibold">
-                            💡 <strong>Consejo General:</strong> Si te enfrentas a una apuesta con una de estas manos muy débiles, la mejor decisión suele ser <strong>Fold</strong>.
+                            💡 <strong>Consejo General:</strong> Si te enfrentas a una apuesta con una de estas manos muy d&eacute;biles, la mejor decisi&oacute;n suele ser <strong>Fold</strong>.
                         </p>
                     </div>
                 </div>
@@ -908,7 +921,7 @@ const App: React.FC = () => {
       setCalculandoEquity(false);
       setPreFlopGuidance(null); // Limpiar la guía pre-flop
     }
-  }, [cartasManoJugador, cartasComunitarias, mazoCompleto, boteActual, apuestaAEnfrentar, resultadoMano]); // Dependencias actualizadas
+  }, [cartasManoJugador, cartasComunitarias, boteActual, apuestaAEnfrentar]); // Dependencias actualizadas
 
   // Manejar la eliminación de una carta de la mano del jugador
   const eliminarCartaMano = useCallback((cartaAEliminar: Carta) => {
@@ -992,8 +1005,8 @@ const App: React.FC = () => {
 
   // Agrupar cartas que dan outs por rango para una visualización compacta
   const outsPorRango: { [key: string]: number } = {};
-  if (outsResult && outsResult.cartasQueDanOuts.length > 0) {
-    outsResult.cartasQueDanOuts.forEach(carta => {
+  if (outsResult && outsResult.cartasQueDanOuts && outsResult.cartasQueDanOuts.length > 0) {
+    outsResult.cartasQueDanOuts.forEach(carta => { // FIXED: Changed .cartasQueOuts to .cartasQueDanOuts
       outsPorRango[carta.rango] = (outsPorRango[carta.rango] || 0) + 1;
     });
   }
@@ -1497,7 +1510,11 @@ const App: React.FC = () => {
                 ASeptar
               </h3>
             </div>
-            <div className="flex justify-center space-x-8 mt-8 text-slate-00">
+            <p className="text-slate-300 max-w-2xl mx-auto leading-relaxed">
+              Herramienta de análisis de poker desarrollada para jugadores serios que buscan mejorar su juego 
+              a través de matemáticas precisas y análisis estadístico avanzado.
+            </p>
+            <div className="flex justify-center space-x-8 mt-8 text-slate-400">
               <div className="flex items-center space-x-2">
                 <Calculator className="w-4 h-4" />
                 <span className="text-sm">Cálculos Precisos</span>
@@ -1511,38 +1528,9 @@ const App: React.FC = () => {
                 <span className="text-sm">Decisiones Óptimas</span>
               </div>
             </div>
-
-            {/* Copyright y información legal */}
-            <div className="border-t border-slate-500 pt-6 mt-6">
-              <div className="flex flex-col md:flex-row justify-center items-center space-y-2 md:space-y-0 md:space-x-8 text-sm text-slate-300">
-                <p>© {new Date().getFullYear()} ASeptar. Todos los derechos reservados.</p>
-                <div className="flex items-center space-x-4">
-                  <span>•</span>
-                  <p>Desarrollado para uso educativo y de entretenimiento</p>
-                  <span>•</span>
-                  <p>Juega responsablemente</p>
-                </div>
-              </div>
-              
-              {/* Disclaimer legal */}
-              <div className="mt-4 text-xs text-slate-400 max-w-4xl mx-auto leading-relaxed">
-                <p>
-                  <strong>Aviso Legal:</strong> Esta herramienta está diseñada únicamente para fines educativos y de análisis matemático. 
-                  Los cálculos de probabilidades son aproximaciones basadas en simulaciones. ASeptar no promueve el juego compulsivo 
-                  y recomienda jugar de manera responsable. El poker implica riesgo financiero y debe practicarse solo por personas 
-                  mayores de edad en jurisdicciones donde sea legal.
-                </p>
-              </div>
-            </div>
-
-            
           </div>
         </div>
       </footer>
-
-
-
-      
     </div>
   );
 };
