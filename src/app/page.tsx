@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { SpadeIcon as Spades, Heart, Diamond, Club, TrendingUp, Calculator, Target, Award, Zap, RotateCcw, Plus, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { SpadeIcon as Spades, Club, TrendingUp, Calculator, Target, Award, RotateCcw, Plus } from 'lucide-react';
 
 // Definición de los palos de las cartas
 type Palo = 'Corazones' | 'Diamantes' | 'Picas' | 'Tréboles';
@@ -1124,7 +1124,7 @@ const App: React.FC = () => {
       setPreFlopGuidance(null); // Limpiar la guía pre-flop
       setDynamicDrawsResult(null); // Limpiar proyectos dinámicos
     }
-  }, [cartasManoJugador, cartasComunitarias, boteActual, apuestaAEnfrentar]); // Dependencias actualizadas
+  }, [cartasManoJugador, cartasComunitarias, boteActual, apuestaAEnfrentar, mazoCompleto]); // Dependencias actualizadas
 
   // Manejar la eliminación de una carta de la mano del jugador
   const eliminarCartaMano = useCallback((cartaAEliminar: Carta) => {
@@ -1605,7 +1605,7 @@ const App: React.FC = () => {
                 <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
                     <div className="px-6 py-4 border-b border-slate-200">
                         <h3 className="text-lg font-semibold text-slate-900 flex items-center">
-                            <BarChart3 className="w-5 h-5 mr-2" />
+                            <Calculator className="w-5 h-5 mr-2" />
                             Análisis de Proyectos
                         </h3>
                         <p className="text-slate-600 text-sm mt-1">Probabilidades de completar tus proyectos de mano.</p>
