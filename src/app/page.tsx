@@ -1103,7 +1103,7 @@ const App: React.FC = () => {
                     maxLength={2}
                     placeholder="A"
                   />
-                  <p className="text-slate-500 text-xs mt-2">A, K, Q, J, T, 9-2</p>
+                  <p className="text-slate-500 text-xs mt-2">A, K, Q, J, 10/T, 9-2</p>
                 </div>
 
                 {/* Suit selection */}
@@ -1511,7 +1511,7 @@ const App: React.FC = () => {
               </h3>
             </div>
             <p className="text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Herramienta de análisis de poker desarrollada para jugadores serios que buscan mejorar su juego 
+              Herramienta de análisis de poker desarrollada para jugadores principiantes y serios que buscan mejorar su juego 
               a través de matemáticas precisas y análisis estadístico avanzado.
             </p>
             <div className="flex justify-center space-x-8 mt-8 text-slate-400">
